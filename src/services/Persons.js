@@ -1,5 +1,5 @@
 import axios from 'axios'
-const url = 'http://localhost:3001/api/persons';
+const url = 'https://warm-retreat-88184.herokuapp.com/api/persons';
 
 const getAllPersons = () =>{
   const makerequest = axios.get(url);
