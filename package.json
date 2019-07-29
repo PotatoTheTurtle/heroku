@@ -13,7 +13,7 @@
     "react-scripts": "3.0.1"
   },
   "scripts": {
-    "start": "react-scripts start",
+    "start": "npm src\\backend.js",
     "build": "react-scripts build",
     "watch": "nodemon src\\backend.js",
     "test": "react-scripts test",
