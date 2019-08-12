@@ -1,93 +1,100 @@
+
+require("dotenv").config();
 const express = require('express');
 const app = express();
 const morgan = require('morgan');
 const bodyParser = require('body-parser');
 const cors = require('cors');
+const Person = require('./models/mongo');
 
-app.use(express.static('build'));
 app.use(cors());
-app.use(morgan('tiny'));
+
+morgan.token('post', () => false);
+app.use(morgan(':method :url :status :res[content-length] - :response-time ms :post'));
 app.use(bodyParser.json());
 
-morgan.token('type', (req, res) =>{
-  console.log(req.headers);
-  console.log(res);
-  return req.headers['content-type']});
-
-let persons = [
-  {
-    "name": "Arto Hellas",
-    "number": "040-5801516",
-    "id": 1
-  },
-  {
-    "name": "Ada Lovelace",
-    "number": "39-44-5323523",
-    "id": 2
-  },
-  {
-    "name": "Dan Abramov",
-    "number": "12-43-234345",
-    "id": 3
-  },
-  {
-    "name": "Mary Poppendieck",
-    "number": "39-23-6423122",
-    "id": 4
-  }
-];
-
 app.get('/api/persons/:id', (request, response) => {
-  const id = Number(request.params.id);
-  const person = persons.find(note => note.id === id);
-  if(person){
-    response.json(person)
-  }else{
-    response.status(404).end()
-  }
+  Person.findById(request.params.id)
+    .then(person => {
+      if (person) {
+        response.json(person.toJSON())
+      }else{
+        response.status(404).end()
+      }
+    })
+    .catch(error => {
+      console.log(error);
+      response.status(400).send({error: "malformatted id"})})
 
 });
 
 app.get('/api/persons', (request, response) => {
-  response.json(persons)
+  Person.find({}).then(people => response.json(people.map(person => person.toJSON())))
 });
 
 app.get('/info', (request, response) => {
-  response.send(`<p>Phonebook has info for ${persons.length} people</p>`);
-  response.end()
+  Person.find({}).then(people => {
+    response.send(`<p>Phonebook has info for ${people.length} people</p>`);
+    response.end()
+  })
 });
 
-app.delete('/api/persons/:id', (req, response) =>{
-  const id = Number(req.params.id);
-  persons = persons.filter(person => person.id !== id);
-
-  response.status(204).end()
+app.delete('/api/persons/:id', (req, response , next) =>{
+  Person.findByIdAndRemove(req.params.id)
+    .then(result => response.status(204).end())
+    .catch(error => next(error));
 });
 
-app.post('/api/persons', (req, response) =>{
+app.post('/api/persons', (req, response, next) =>{
   const bodycontent = req.body;
 
   if(!bodycontent.name || !bodycontent.number){
     return response.status(400).json({error: "Name or number is missing"})
   }
 
-  const findSameName = persons.find(person => person.name === bodycontent.name);
-  if(findSameName){
-    return response.status(400).json({error: "Name must be unique"})
-  }
-
-  const newPerson = {
+  const newPerson = new Person({
     "name": bodycontent.name,
-    "number": bodycontent.number,
-    "id": Math.floor((Math.random() * 500) + 1)
-  };
+    "number": bodycontent.number
+  });
 
-  persons = persons.concat(newPerson);
+  morgan.token('post',(req, res) => req.method === 'POST' ? JSON.stringify(newPerson) : false);
 
-  response.json(newPerson)
+  newPerson
+    .save()
+    .then(saved => response.json(saved.toJSON()))
+    .catch(error => next(error));
 
 });
 
+app.put('/api/persons/:id', (req, response, next) =>{
+  const content = req.body;
+  console.log(content.number);
+
+  const newperson = {
+    number: content.number,
+  };
+
+  Person.findByIdAndUpdate(req.params.id, newperson, {new: true, runValidators: true, context: 'query' })
+    .then(updated =>{
+      response.json(updated.toJSON())
+    })
+    .catch(error => next(error));
+});
+
+const errorHandler = (error, request, response, next) =>{
+  console.log(error.message);
+
+  if(error.name === "CastError" && error.kind === 'ObjectId'){
+    return response.status(400).send({error: "malformatted id"})
+  } else if(error.name === "ValidationError" && (error.errors.number.properties.type === "unique" || error.kind === "unique")){
+    return response.status(400).send({error: error.message})
+  }
+
+
+  next(error)
+};
+
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
