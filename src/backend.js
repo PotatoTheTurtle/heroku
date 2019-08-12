@@ -8,6 +8,7 @@ const cors = require('cors');
 const Person = require('./models/mongo');
 
 app.use(cors());
+app.use(express.static('build'))
 
 morgan.token('post', () => false);
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms :post'));
